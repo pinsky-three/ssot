@@ -1,9 +1,7 @@
-// use std::fs::DirEntry;
-
+use file_format::FileFormat;
 use git2::{Cred, RemoteCallbacks};
-
+use humansize::{format_size, DECIMAL};
 use octocrab::Octocrab;
-
 use walkdir::{DirEntry, WalkDir};
 
 #[tokio::main]
@@ -42,9 +40,9 @@ async fn main() -> octocrab::Result<()> {
 
         fo.remote_callbacks(callbacks);
 
-        let temp_dir = std::env::temp_dir().join(repo_name);
+        let repo_temp_dir = std::env::temp_dir().join(repo_name);
 
-        let _repo = match git2::Repository::open(temp_dir.as_path()) {
+        let _repo = match git2::Repository::open(repo_temp_dir.as_path()) {
             Ok(repo) => {
                 // println!("{}: already cloned", repo_name);
                 repo
@@ -56,7 +54,7 @@ async fn main() -> octocrab::Result<()> {
                 {
                     git2::build::RepoBuilder::new()
                         .fetch_options(fo)
-                        .clone(clone_url.as_str(), &temp_dir)
+                        .clone(clone_url.as_str(), &repo_temp_dir)
                         .unwrap()
                 } else {
                     panic!("error: {}", err.message());
@@ -64,22 +62,40 @@ async fn main() -> octocrab::Result<()> {
             }
         };
 
-        let repo_local_dir = temp_dir.to_str().unwrap();
+        let repo_local_dir = repo_temp_dir.to_str().unwrap();
+        // println!("  L {}", repo_local_dir);
 
-        for entry in WalkDir::new(repo_local_dir)
+        for (j, entry) in WalkDir::new(repo_local_dir)
             .into_iter()
-            .filter_entry(|dir_entry| !is_hidden(dir_entry))
+            .filter_entry(|dir_entry| !is_hidden(dir_entry) && !black_listed(dir_entry))
+            .enumerate()
         {
             let entry = entry.unwrap();
 
             if entry.path().is_file() {
                 // println!("  L {}", entry.path().display());
 
-                let kind = infer::get_from_path(entry.path())
-                    .expect("file read successfully")
-                    .map(|x| x.matcher_type());
+                // let kind = infer::get_from_path(entry.path())
+                //     .expect("file read successfully")
+                //     .map(|x| x.matcher_type());
+                let fmt = FileFormat::from_file(entry.path()).unwrap();
 
-                println!("  [{}] {}: {:?}", i, entry.path().display(), kind);
+                // if the entry.path() is: `/var/folders/k2/gxrql7_14cz20q6kpq4jxspw0000gn/T/api-specification/json-schema/settings-req.schema.json`
+                // and the repo_local_dir = "/var/folders/k2/gxrql7_14cz20q6kpq4jxspw0000gn/T/api-specification"
+
+                // calculate the relative path
+                let relative_path = entry.path().strip_prefix(repo_local_dir).unwrap();
+
+                let size = format_size(entry.metadata().unwrap().len(), DECIMAL);
+
+                println!(
+                    "  [{}.{}] {} ({}) {}",
+                    i,
+                    j,
+                    relative_path.display(),
+                    size,
+                    fmt
+                );
 
                 // match kind {
                 //     Some(MatcherType::Text) | Some(MatcherType::Doc) => {
@@ -111,5 +127,13 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .file_name()
         .to_str()
         .map(|s| s.starts_with("."))
+        .unwrap_or(false)
+}
+
+fn black_listed(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("node_modules"))
         .unwrap_or(false)
 }
