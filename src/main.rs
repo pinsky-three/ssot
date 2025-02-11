@@ -1,9 +1,10 @@
 // use std::fs::DirEntry;
 
 use git2::{Cred, RemoteCallbacks};
+
 use octocrab::Octocrab;
 
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 #[tokio::main]
 
@@ -65,20 +66,35 @@ async fn main() -> octocrab::Result<()> {
 
         let repo_local_dir = temp_dir.to_str().unwrap();
 
-        for entry in WalkDir::new(repo_local_dir) {
+        for entry in WalkDir::new(repo_local_dir)
+            .into_iter()
+            .filter_entry(|dir_entry| !is_hidden(dir_entry))
+        {
             let entry = entry.unwrap();
 
             if entry.path().is_file() {
+                // println!("  L {}", entry.path().display());
+
                 let kind = infer::get_from_path(entry.path())
                     .expect("file read successfully")
-                    .map(|x| x.mime_type())
-                    .unwrap_or("unknown");
+                    .map(|x| x.matcher_type());
 
-                if kind == "text/plain" {
-                    let content = std::fs::read_to_string(entry.path()).unwrap();
-                    println!("{}: {:?} [{}]", entry.path().display(), kind, content.len());
-                    // println!("{}", content.len());
-                }
+                println!("  [{}] {}: {:?}", i, entry.path().display(), kind);
+
+                // match kind {
+                //     Some(MatcherType::Text) | Some(MatcherType::Doc) => {
+
+                //     } // let content = std::fs::read_to_string(entry.path()).unwrap();
+                //     // println!("  [{}] {}: {:?}", i, entry.path().display(), kind);
+                //     // println!("{}", content.len());
+                //     _ => {}
+                // }
+
+                // if kind == "text/plain" {
+                //     let content = std::fs::read_to_string(entry.path()).unwrap();
+
+                // println!("{}", content.len());
+                // }
             }
         }
 
@@ -88,4 +104,12 @@ async fn main() -> octocrab::Result<()> {
     }
 
     Ok(())
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
 }
