@@ -63,7 +63,6 @@ async fn main() -> octocrab::Result<()> {
         };
 
         let repo_local_dir = repo_temp_dir.to_str().unwrap();
-        // println!("  L {}", repo_local_dir);
 
         for (j, entry) in WalkDir::new(repo_local_dir)
             .into_iter()
@@ -73,17 +72,8 @@ async fn main() -> octocrab::Result<()> {
             let entry = entry.unwrap();
 
             if entry.path().is_file() {
-                // println!("  L {}", entry.path().display());
-
-                // let kind = infer::get_from_path(entry.path())
-                //     .expect("file read successfully")
-                //     .map(|x| x.matcher_type());
                 let fmt = FileFormat::from_file(entry.path()).unwrap();
 
-                // if the entry.path() is: `/var/folders/k2/gxrql7_14cz20q6kpq4jxspw0000gn/T/api-specification/json-schema/settings-req.schema.json`
-                // and the repo_local_dir = "/var/folders/k2/gxrql7_14cz20q6kpq4jxspw0000gn/T/api-specification"
-
-                // calculate the relative path
                 let relative_path = entry.path().strip_prefix(repo_local_dir).unwrap();
 
                 let size = format_size(entry.metadata().unwrap().len(), DECIMAL);
@@ -96,27 +86,8 @@ async fn main() -> octocrab::Result<()> {
                     size,
                     fmt
                 );
-
-                // match kind {
-                //     Some(MatcherType::Text) | Some(MatcherType::Doc) => {
-
-                //     } // let content = std::fs::read_to_string(entry.path()).unwrap();
-                //     // println!("  [{}] {}: {:?}", i, entry.path().display(), kind);
-                //     // println!("{}", content.len());
-                //     _ => {}
-                // }
-
-                // if kind == "text/plain" {
-                //     let content = std::fs::read_to_string(entry.path()).unwrap();
-
-                // println!("{}", content.len());
-                // }
             }
         }
-
-        // for remote in remotes.iter() {
-
-        // }
     }
 
     Ok(())
