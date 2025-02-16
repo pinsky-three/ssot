@@ -1,11 +1,30 @@
+use std::path::PathBuf;
+
 use file_format::FileFormat;
 use git2::{Cred, RemoteCallbacks};
 use humansize::{format_size, DECIMAL};
 use octocrab::Octocrab;
 use walkdir::{DirEntry, WalkDir};
 
-#[tokio::main]
+struct Project {
+    github_organization: String,
+    repositories: Vec<Repository>,
+}
 
+struct Repository {
+    name: String,
+    clone_url: String,
+    sources: Vec<Source>,
+}
+
+struct Source {
+    path: PathBuf,
+    relative_path: PathBuf,
+    size: Option<u64>,
+    content: Option<String>,
+}
+
+#[tokio::main]
 async fn main() -> octocrab::Result<()> {
     dotenvy::dotenv().expect("dotenv failed");
 
@@ -24,6 +43,11 @@ async fn main() -> octocrab::Result<()> {
         .send()
         .await?;
 
+    let mut project = Project {
+        github_organization: "vacuul-dev".to_string(),
+        repositories: vec![],
+    };
+
     for (i, repo) in my_repos.into_iter().enumerate() {
         let clone_url = repo.clone_url.unwrap();
         println!("{}: {}", i, &clone_url);
@@ -40,7 +64,7 @@ async fn main() -> octocrab::Result<()> {
 
         fo.remote_callbacks(callbacks);
 
-        let repo_temp_dir = std::env::temp_dir().join(repo_name);
+        let repo_temp_dir = std::env::temp_dir().join(repo_name.clone());
 
         let _repo = match git2::Repository::open(repo_temp_dir.as_path()) {
             Ok(repo) => {
@@ -48,21 +72,31 @@ async fn main() -> octocrab::Result<()> {
                 repo
             }
             Err(err) => {
-                if err
-                    .message()
-                    .contains("exists and is not an empty directory")
-                {
-                    git2::build::RepoBuilder::new()
-                        .fetch_options(fo)
-                        .clone(clone_url.as_str(), &repo_temp_dir)
-                        .unwrap()
-                } else {
-                    panic!("error: {}", err.message());
-                }
+                println!("error: {}", err.message());
+
+                git2::build::RepoBuilder::new()
+                    .fetch_options(fo)
+                    .clone(clone_url.as_str(), &repo_temp_dir)
+                    .unwrap()
+
+                // if err
+                //     .message()
+                //     .contains("exists and is not an empty directory")
+                // {
+
+                // } else {
+                //     panic!("error: {}", err.message());
+                // }
             }
         };
 
         let repo_local_dir = repo_temp_dir.to_str().unwrap();
+
+        let mut repo = Repository {
+            name: repo_name,
+            clone_url: clone_url.to_string(),
+            sources: vec![],
+        };
 
         for (j, entry) in WalkDir::new(repo_local_dir)
             .into_iter()
@@ -78,6 +112,13 @@ async fn main() -> octocrab::Result<()> {
 
                 let size = format_size(entry.metadata().unwrap().len(), DECIMAL);
 
+                let source = Source {
+                    path: entry.path().to_path_buf(),
+                    relative_path: relative_path.to_path_buf(),
+                    size: Some(entry.metadata().unwrap().len()),
+                    content: None,
+                };
+
                 println!(
                     "  [{}.{}] {} ({}) {}",
                     i,
@@ -86,8 +127,12 @@ async fn main() -> octocrab::Result<()> {
                     size,
                     fmt
                 );
+
+                repo.sources.push(source);
             }
         }
+
+        project.repositories.push(repo);
     }
 
     Ok(())
