@@ -66,29 +66,47 @@ async fn main() -> octocrab::Result<()> {
 
         let repo_temp_dir = std::env::temp_dir().join(repo_name.clone());
 
-        let _repo = match git2::Repository::open(repo_temp_dir.as_path()) {
-            Ok(repo) => {
-                // println!("{}: already cloned", repo_name);
-                repo
-            }
-            Err(err) => {
-                println!("error: {}", err.message());
+        if repo_temp_dir.exists() {
+            // std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
+            let items = repo_temp_dir.read_dir().unwrap().count();
+            println!("items: {}", items);
 
+            if repo_temp_dir.is_dir() && repo_temp_dir.read_dir().unwrap().count() < 2 {
+                std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
+
+                println!("cloning: {}", repo_name);
                 git2::build::RepoBuilder::new()
                     .fetch_options(fo)
                     .clone(clone_url.as_str(), &repo_temp_dir)
-                    .unwrap()
-
-                // if err
-                //     .message()
-                //     .contains("exists and is not an empty directory")
-                // {
-
-                // } else {
-                //     panic!("error: {}", err.message());
-                // }
+                    .unwrap();
             }
-        };
+
+            let _repo = git2::Repository::open(repo_temp_dir.as_path()).unwrap();
+        }
+
+        // let _repo = match  {
+        //     Ok(repo) => {
+        //         // println!("{}: already cloned", repo_name);
+        //         repo
+        //     }
+        //     Err(err) => {
+        //         println!("error: {}", err.message());
+
+        //         git2::build::RepoBuilder::new()
+        //             .fetch_options(fo)
+        //             .clone(clone_url.as_str(), &repo_temp_dir)
+        //             .unwrap()
+
+        //         // if err
+        //         //     .message()
+        //         //     .contains("exists and is not an empty directory")
+        //         // {
+
+        //         // } else {
+        //         //     panic!("error: {}", err.message());
+        //         // }
+        //     }
+        // };
 
         let repo_local_dir = repo_temp_dir.to_str().unwrap();
 
@@ -134,6 +152,10 @@ async fn main() -> octocrab::Result<()> {
 
         project.repositories.push(repo);
     }
+
+    let total_repos = project.repositories.len();
+
+    println!("Total repos: {}", total_repos);
 
     Ok(())
 }
