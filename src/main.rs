@@ -71,10 +71,25 @@ async fn main() -> octocrab::Result<()> {
             let items = repo_temp_dir.read_dir().unwrap().count();
             println!("items: {}", items);
 
-            if repo_temp_dir.is_dir() && repo_temp_dir.read_dir().unwrap().count() < 2 {
+            let ssot_ignore = std::fs::read_to_string(".ssotignore");
+            let ssot_ignore = ssot_ignore
+                .unwrap_or("".to_string())
+                .split("\n")
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>();
+
+            if ssot_ignore.contains(&repo_name) {
+                continue;
+            }
+
+            if repo_temp_dir.is_dir() && repo_temp_dir.read_dir().unwrap().count() > 0 {
                 std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
 
-                println!("cloning: {}", repo_name);
+                // println!("cloning: {}", repo_name);
+
+                // repo_name
                 git2::build::RepoBuilder::new()
                     .fetch_options(fo)
                     .clone(clone_url.as_str(), &repo_temp_dir)
