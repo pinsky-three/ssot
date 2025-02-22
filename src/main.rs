@@ -1,10 +1,17 @@
-use std::path::PathBuf;
-
+use askama::Template;
 use file_format::FileFormat;
 use git2::{Cred, RemoteCallbacks};
 use humansize::{format_size, DECIMAL};
 use octocrab::Octocrab;
+use std::error::Error;
+use std::path::PathBuf;
 use walkdir::{DirEntry, WalkDir};
+
+#[derive(Template)]
+#[template(path = "composer.md")]
+struct ComposerTemplate {
+    project: Project,
+}
 
 struct Project {
     github_organization: String,
@@ -18,14 +25,35 @@ struct Repository {
 }
 
 struct Source {
-    path: PathBuf,
-    relative_path: PathBuf,
-    size: Option<u64>,
+    path: InternalPathBuf,
+    relative_path: InternalPathBuf,
+    format: FileFormat,
+    size: DisplayableOptionU64,
     content: Option<String>,
 }
 
+pub struct InternalPathBuf(pub PathBuf);
+
+impl std::fmt::Display for InternalPathBuf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.display())
+    }
+}
+
+// define new type that wraps Option<u64> to implement display
+pub struct DisplayableOptionU64(pub Option<u64>);
+
+impl std::fmt::Display for DisplayableOptionU64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(v) => write!(f, "{}", v),
+            None => write!(f, "None"),
+        }
+    }
+}
+
 #[tokio::main]
-async fn main() -> octocrab::Result<()> {
+async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().expect("dotenv failed");
 
     let main_username =
@@ -67,12 +95,10 @@ async fn main() -> octocrab::Result<()> {
         let repo_temp_dir = std::env::temp_dir().join(repo_name.clone());
 
         if repo_temp_dir.exists() {
-            // std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
             let items = repo_temp_dir.read_dir().unwrap().count();
             println!("items: {}", items);
 
-            let ssot_ignore = std::fs::read_to_string(".ssotignore");
-            let ssot_ignore = ssot_ignore
+            let ssot_ignore = std::fs::read_to_string(".ssotignore")
                 .unwrap_or("".to_string())
                 .split("\n")
                 .map(|s| s.trim())
@@ -84,7 +110,14 @@ async fn main() -> octocrab::Result<()> {
                 continue;
             }
 
-            if repo_temp_dir.is_dir() && repo_temp_dir.read_dir().unwrap().count() > 0 {
+            if repo_temp_dir.is_dir()
+                && repo_temp_dir
+                    .read_dir()
+                    .unwrap()
+                    .filter(|entry| entry.as_ref().unwrap().path().starts_with(".git"))
+                    .count()
+                    < 1
+            {
                 std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
 
                 // println!("cloning: {}", repo_name);
@@ -99,30 +132,6 @@ async fn main() -> octocrab::Result<()> {
             let _repo = git2::Repository::open(repo_temp_dir.as_path()).unwrap();
         }
 
-        // let _repo = match  {
-        //     Ok(repo) => {
-        //         // println!("{}: already cloned", repo_name);
-        //         repo
-        //     }
-        //     Err(err) => {
-        //         println!("error: {}", err.message());
-
-        //         git2::build::RepoBuilder::new()
-        //             .fetch_options(fo)
-        //             .clone(clone_url.as_str(), &repo_temp_dir)
-        //             .unwrap()
-
-        //         // if err
-        //         //     .message()
-        //         //     .contains("exists and is not an empty directory")
-        //         // {
-
-        //         // } else {
-        //         //     panic!("error: {}", err.message());
-        //         // }
-        //     }
-        // };
-
         let repo_local_dir = repo_temp_dir.to_str().unwrap();
 
         let mut repo = Repository {
@@ -136,6 +145,10 @@ async fn main() -> octocrab::Result<()> {
             .filter_entry(|dir_entry| !is_hidden(dir_entry) && !black_listed(dir_entry))
             .enumerate()
         {
+            if j > 1 {
+                continue;
+            }
+
             let entry = entry.unwrap();
 
             if entry.path().is_file() {
@@ -146,9 +159,10 @@ async fn main() -> octocrab::Result<()> {
                 let size = format_size(entry.metadata().unwrap().len(), DECIMAL);
 
                 let source = Source {
-                    path: entry.path().to_path_buf(),
-                    relative_path: relative_path.to_path_buf(),
-                    size: Some(entry.metadata().unwrap().len()),
+                    format: fmt,
+                    path: InternalPathBuf(entry.path().to_path_buf()),
+                    relative_path: InternalPathBuf(relative_path.to_path_buf()),
+                    size: DisplayableOptionU64(Some(entry.metadata().unwrap().len())),
                     content: None,
                 };
 
@@ -171,6 +185,13 @@ async fn main() -> octocrab::Result<()> {
     let total_repos = project.repositories.len();
 
     println!("Total repos: {}", total_repos);
+
+    let composition = ComposerTemplate { project };
+
+    // println!("{}", hello.render().unwrap());
+
+    // save render into output.md file (Create if not exists)
+    std::fs::write("output.md", composition.render().unwrap()).unwrap();
 
     Ok(())
 }
