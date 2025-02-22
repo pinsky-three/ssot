@@ -14,12 +14,10 @@
 
 {% match source.content %}
 {% when Some with (val)  %}
-```
+``````
 {{ val }}
-```
+``````
 {% when None %}
 {% endmatch %}
-
 {% endfor %}
-
 {% endfor %}

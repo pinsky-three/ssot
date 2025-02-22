@@ -18,6 +18,23 @@ struct Project {
     repositories: Vec<Repository>,
 }
 
+impl Project {
+    fn expand_content(
+        &mut self,
+        filter_fn: impl Fn(&&mut Source) -> bool,
+    ) -> Result<(), Box<dyn Error>> {
+        self.repositories
+            .iter_mut()
+            .flat_map(|repo| &mut repo.sources)
+            .filter(filter_fn)
+            .for_each(|source| {
+                source.content = std::fs::read_to_string(source.path.0.as_path()).ok();
+            });
+
+        Ok(())
+    }
+}
+
 struct Repository {
     name: String,
     clone_url: String,
@@ -94,21 +111,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let repo_temp_dir = std::env::temp_dir().join(repo_name.clone());
 
+        let ssot_ignore = std::fs::read_to_string(".ssotignore")
+            .unwrap_or("".to_string())
+            .split("\n")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+
+        if ssot_ignore.contains(&repo_name) {
+            continue;
+        }
+
         if repo_temp_dir.exists() {
             let items = repo_temp_dir.read_dir().unwrap().count();
             println!("items: {}", items);
-
-            let ssot_ignore = std::fs::read_to_string(".ssotignore")
-                .unwrap_or("".to_string())
-                .split("\n")
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>();
-
-            if ssot_ignore.contains(&repo_name) {
-                continue;
-            }
 
             if repo_temp_dir.is_dir()
                 && repo_temp_dir
@@ -145,10 +162,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .filter_entry(|dir_entry| !is_hidden(dir_entry) && !black_listed(dir_entry))
             .enumerate()
         {
-            if j > 1 {
-                continue;
-            }
-
             let entry = entry.unwrap();
 
             if entry.path().is_file() {
@@ -186,11 +199,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Total repos: {}", total_repos);
 
+    project.expand_content(|source| {
+        let size = source.size.0.unwrap();
+
+        size < 1024 * 1024 * 10 && (source.format == FileFormat::ArbitraryBinaryData)
+        // || source.format == FileFormat::ScalableVectorGraphics)
+    })?;
+
     let composition = ComposerTemplate { project };
 
-    // println!("{}", hello.render().unwrap());
-
-    // save render into output.md file (Create if not exists)
     std::fs::write("output.md", composition.render().unwrap()).unwrap();
 
     Ok(())
