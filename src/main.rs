@@ -199,13 +199,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Total repos: {}", total_repos);
 
+    let max_size_in_kb = 5;
+
     project.expand_content(|source| {
-        let size = source.size.0.unwrap();
-
-        let max_size_in_kb = 5;
-
-        size < 1024 * max_size_in_kb && (source.format == FileFormat::ArbitraryBinaryData)
-        // || source.format == FileFormat::ScalableVectorGraphics)
+        source.size.0.unwrap() < 1024 * max_size_in_kb
+            && (source.format == FileFormat::ArbitraryBinaryData)
     })?;
 
     let composition = ComposerTemplate { project };
