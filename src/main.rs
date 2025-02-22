@@ -202,7 +202,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     project.expand_content(|source| {
         let size = source.size.0.unwrap();
 
-        size < 1024 * 1024 * 10 && (source.format == FileFormat::ArbitraryBinaryData)
+        let max_size_in_kb = 5;
+
+        size < 1024 * max_size_in_kb && (source.format == FileFormat::ArbitraryBinaryData)
         // || source.format == FileFormat::ScalableVectorGraphics)
     })?;
 
