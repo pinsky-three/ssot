@@ -123,33 +123,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
             continue;
         }
 
-        if repo_temp_dir.exists() {
-            let items = repo_temp_dir.read_dir().unwrap().count();
-            println!("items: {}", items);
-
-            if repo_temp_dir.is_dir()
+        // Clone the repository if it doesn't exist or doesn't have a .git directory
+        if !repo_temp_dir.exists()
+            || (repo_temp_dir.is_dir()
                 && repo_temp_dir
                     .read_dir()
                     .unwrap()
                     .filter(|entry| entry.as_ref().unwrap().path().starts_with(".git"))
                     .count()
-                    < 1
-            {
+                    < 1)
+        {
+            // Remove the directory if it exists but doesn't have a .git directory
+            if repo_temp_dir.exists() {
                 std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
-
-                // println!("cloning: {}", repo_name);
-
-                // repo_name
-                git2::build::RepoBuilder::new()
-                    .fetch_options(fo)
-                    .clone(clone_url.as_str(), &repo_temp_dir)
-                    .unwrap();
             }
 
-            let _repo = git2::Repository::open(repo_temp_dir.as_path()).unwrap();
+            println!("cloning: {}", repo_name);
+
+            git2::build::RepoBuilder::new()
+                .fetch_options(fo)
+                .clone(clone_url.as_str(), &repo_temp_dir)
+                .unwrap();
         }
 
+        let _repo = git2::Repository::open(repo_temp_dir.as_path()).unwrap();
+
         let repo_local_dir = repo_temp_dir.to_str().unwrap();
+
+        println!("repo_local_dir: {}", repo_local_dir);
 
         let mut repo = Repository {
             name: repo_name,
