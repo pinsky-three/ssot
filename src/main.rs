@@ -78,10 +78,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let token = std::env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN env variable is required");
 
+    // Organization name can be set via environment variable or defaults to "vacuul-dev"
+    let github_organization =
+        std::env::var("GITHUB_ORGANIZATION").unwrap_or_else(|_| "vacuul-dev".to_string());
+    println!("Using GitHub organization: {}", github_organization);
+
     let octocrab = Octocrab::builder().personal_token(token.clone()).build()?;
 
     let my_repos = octocrab
-        .orgs("vacuul-dev")
+        .orgs(&github_organization)
         .list_repos()
         .per_page(250)
         .page(0u32)
@@ -89,9 +94,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     let mut project = Project {
-        github_organization: "vacuul-dev".to_string(),
+        github_organization: github_organization.clone(),
         repositories: vec![],
     };
+
+    let ssot_ignore = std::fs::read_to_string(".ssotignore")
+        .unwrap_or("".to_string())
+        .split("\n")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
 
     for (i, repo) in my_repos.into_iter().enumerate() {
         let clone_url = repo.clone_url.unwrap();
@@ -111,14 +124,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let repo_temp_dir = std::env::temp_dir().join(repo_name.clone());
 
-        let ssot_ignore = std::fs::read_to_string(".ssotignore")
-            .unwrap_or("".to_string())
-            .split("\n")
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
-
         if ssot_ignore.contains(&repo_name) {
             continue;
         }
@@ -135,15 +140,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         {
             // Remove the directory if it exists but doesn't have a .git directory
             if repo_temp_dir.exists() {
+                println!(
+                    "Removing incomplete repository at: {}",
+                    repo_temp_dir.display()
+                );
                 std::fs::remove_dir_all(repo_temp_dir.as_path()).unwrap();
             }
 
-            println!("cloning: {}", repo_name);
+            println!("Cloning repository: {} from {}", repo_name, clone_url);
 
             git2::build::RepoBuilder::new()
                 .fetch_options(fo)
                 .clone(clone_url.as_str(), &repo_temp_dir)
                 .unwrap();
+        } else {
+            println!("Using existing repository: {}", repo_name);
         }
 
         let _repo = git2::Repository::open(repo_temp_dir.as_path()).unwrap();
