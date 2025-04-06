@@ -43,7 +43,7 @@ struct Repository {
 
 struct Source {
     path: InternalPathBuf,
-    relative_path: InternalPathBuf,
+    relative_path: String,
     format: FileFormat,
     size: DisplayableOptionU64,
     content: Option<String>,
@@ -164,10 +164,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("repo_local_dir: {}", repo_local_dir);
 
         let mut repo = Repository {
-            name: repo_name,
+            name: repo_name.clone(),
             clone_url: clone_url.to_string(),
             sources: vec![],
         };
+
+        let repo_name = repo_name.clone();
 
         for (j, entry) in WalkDir::new(repo_local_dir)
             .into_iter()
@@ -186,7 +188,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let source = Source {
                     format: fmt,
                     path: InternalPathBuf(entry.path().to_path_buf()),
-                    relative_path: InternalPathBuf(relative_path.to_path_buf()),
+                    relative_path: format!("{}/{}", repo_name, relative_path.to_str().unwrap()),
                     size: DisplayableOptionU64(Some(entry.metadata().unwrap().len())),
                     content: None,
                 };
