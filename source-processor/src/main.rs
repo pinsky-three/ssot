@@ -167,19 +167,19 @@ impl SourceCodeVisualizationApp {
                     }
                     Self::info_icon(
                         ui,
-                        "Manual navigation: Ctrl+wheel (zoom), drag (pan / node drag).",
+                        "Manual navigation: trackpad pinch to zoom, Ctrl+wheel (zoom), drag (pan / node drag).",
                     );
                 });
 
                 ui.add_enabled_ui(self.settings_navigation.zoom_and_pan_enabled, |ui| {
                     ui.horizontal(|ui| {
                         ui.add(
-                            egui::Slider::new(&mut self.settings_navigation.zoom_speed, 0.01..=1.0)
+                            egui::Slider::new(&mut self.settings_navigation.zoom_speed, 0.01..=2.0)
                                 .text("zoom_speed"),
                         );
                         Self::info_icon(
                             ui,
-                            "Multiplier controlling how fast zoom changes per wheel step.",
+                            "Multiplier controlling zoom speed. Use trackpad pinch or Ctrl+wheel to zoom.",
                         );
                     });
                 });
@@ -969,9 +969,16 @@ fn read_all_files_parallel(dir_path: &str) -> io::Result<Vec<Source>> {
 }
 
 fn main() {
+    let options = NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1280.0, 720.0])
+            .with_min_inner_size([800.0, 600.0]),
+        ..Default::default()
+    };
+
     run_native(
-        "source-code-visualization",
-        NativeOptions::default(),
+        "Source Code Visualization",
+        options,
         Box::new(|cc| Ok(Box::new(SourceCodeVisualizationApp::new(cc)))),
     )
     .unwrap();

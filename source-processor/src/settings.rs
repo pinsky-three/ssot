@@ -59,9 +59,9 @@ impl Default for SettingsNavigation {
         Self {
             fit_to_screen_enabled: false,
             zoom_and_pan_enabled: true,
-            zoom_speed: 0.1,
-            fit_to_screen_padding: 0.1,
+            // Higher zoom speed for better trackpad responsiveness on macOS
+            zoom_speed: 0.02,
+            fit_to_screen_padding: 0.01,
         }
     }
 }
-
