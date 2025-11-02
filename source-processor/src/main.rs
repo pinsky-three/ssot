@@ -8,9 +8,13 @@ use std::{
 
 use eframe::{App, CreationContext, NativeOptions, run_native};
 use egui::Context;
-use egui_graphs::{DefaultGraphView, Graph};
+use egui_graphs::{
+    FruchtermanReingoldWithCenterGravity, FruchtermanReingoldWithCenterGravityState, Graph,
+    GraphView, LayoutForceDirected,
+};
 use ignore::WalkBuilder;
 use petgraph::{prelude::StableDiGraph, stable_graph::StableGraph};
+use rand::Rng;
 use rayon::prelude::*;
 use source_processor::core::{
     computation::compute_references,
@@ -27,12 +31,16 @@ type GraphResult = Result<
     Box<dyn Error>,
 >;
 
+// Type aliases for Force-Directed layout with Center Gravity
+type ForceLayout = LayoutForceDirected<FruchtermanReingoldWithCenterGravity>;
+type ForceState = FruchtermanReingoldWithCenterGravityState;
+
 pub struct BasicApp {
     g: Graph<(), ()>,
 }
 
 impl BasicApp {
-    fn new(_: &CreationContext<'_>) -> Self {
+    fn new(_cc: &CreationContext<'_>) -> Self {
         let (g, label_map) = generate_graph();
 
         // Create egui_graphs graph with empty node data
@@ -54,6 +62,18 @@ impl BasicApp {
 
         let mut egui_graph = Graph::from(&petgraph_empty);
 
+        // Randomize initial node positions around the origin for better force-directed animation
+        let mut rng = rand::thread_rng();
+        let spread = 200.0; // Spread nodes in a 400x400 area centered at origin
+
+        for &egui_idx in petgraph_to_egui.values() {
+            if let Some(node) = egui_graph.node_mut(egui_idx) {
+                let x = rng.gen_range(-spread..spread);
+                let y = rng.gen_range(-spread..spread);
+                node.set_location(egui::Pos2::new(x, y));
+            }
+        }
+
         // Set node labels using the mapping
         for (petgraph_idx, label) in label_map {
             if let Some(egui_idx) = petgraph_to_egui.get(&petgraph_idx)
@@ -70,7 +90,7 @@ impl BasicApp {
 impl App for BasicApp {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.add(&mut DefaultGraphView::new(&mut self.g));
+            ui.add(&mut GraphView::<_, _, _, _, _, _, ForceState, ForceLayout>::new(&mut self.g));
 
             // Display graph statistics
             ui.separator();
