@@ -35,11 +35,11 @@ type GraphResult = Result<
 type ForceLayout = LayoutForceDirected<FruchtermanReingoldWithCenterGravity>;
 type ForceState = FruchtermanReingoldWithCenterGravityState;
 
-pub struct BasicApp {
+pub struct SourceCodeVisualizationApp {
     g: Graph<(), ()>,
 }
 
-impl BasicApp {
+impl SourceCodeVisualizationApp {
     fn new(_cc: &CreationContext<'_>) -> Self {
         let (g, label_map) = generate_graph();
 
@@ -87,7 +87,7 @@ impl BasicApp {
     }
 }
 
-impl App for BasicApp {
+impl App for SourceCodeVisualizationApp {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(&mut GraphView::<_, _, _, _, _, _, ForceState, ForceLayout>::new(&mut self.g));
@@ -104,7 +104,7 @@ fn generate_graph() -> (
     StableGraph<String, ()>,
     HashMap<petgraph::stable_graph::NodeIndex, String>,
 ) {
-    let source = process_source(PathBuf::from("."));
+    let source = process_source(PathBuf::from("/Users/bregy/Documents/tilck"));
 
     source.unwrap()
 }
@@ -356,9 +356,9 @@ fn read_all_files_parallel(dir_path: &str) -> io::Result<Vec<Source>> {
 
 fn main() {
     run_native(
-        "basic",
+        "source-code-visualization",
         NativeOptions::default(),
-        Box::new(|cc| Ok(Box::new(BasicApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(SourceCodeVisualizationApp::new(cc)))),
     )
     .unwrap();
 }
