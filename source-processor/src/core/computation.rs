@@ -22,19 +22,38 @@ fn heuristic_rust_code_references(source: Source) -> Vec<Reference> {
                 .trim();
 
             if !use_part.is_empty() {
-                // Convert crate path to potential file path
-                let path_str = use_part
-                    .replace("::", "/")
-                    .trim_end_matches(|c: char| !c.is_alphanumeric() && c != '_')
-                    .to_string();
+                // Only process local imports (crate::, self::, super::, or local package names)
+                // Skip external crates like std, serde, etc.
+                let is_local = use_part.starts_with("crate::")
+                    || use_part.starts_with("self::")
+                    || use_part.starts_with("super::")
+                    || use_part.starts_with("source_processor::")
+                    || use_part.starts_with("organization_processor::");
 
-                let route = PathBuf::from(format!("{}.rs", path_str));
+                if is_local {
+                    // Remove the "crate::", "self::", "super::", or package prefix
+                    let module_path = use_part
+                        .strip_prefix("crate::")
+                        .or_else(|| use_part.strip_prefix("self::"))
+                        .or_else(|| use_part.strip_prefix("super::"))
+                        .or_else(|| use_part.strip_prefix("source_processor::"))
+                        .or_else(|| use_part.strip_prefix("organization_processor::"))
+                        .unwrap_or(use_part);
 
-                references.push(Reference {
-                    source: source.clone(),
-                    reference_type: ReferenceType::Uses,
-                    route,
-                });
+                    // Convert module path to potential file path
+                    let path_str = module_path
+                        .replace("::", "/")
+                        .trim_end_matches(|c: char| !c.is_alphanumeric() && c != '_')
+                        .to_string();
+
+                    let route = PathBuf::from(format!("{}.rs", path_str));
+
+                    references.push(Reference {
+                        source: source.clone(),
+                        reference_type: ReferenceType::Uses,
+                        route,
+                    });
+                }
             }
         }
     }
