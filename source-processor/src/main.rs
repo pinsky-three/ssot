@@ -110,8 +110,29 @@ fn process_source(source: PathBuf) -> GraphResult {
 fn build_graph(sources: Vec<Source>) -> GraphResult {
     let mut graph = StableDiGraph::new();
     let mut path_to_node = HashMap::new();
+    let mut all_dirs = std::collections::HashSet::new();
 
-    // Step 1: Create nodes for each source file with file names as labels
+    // Step 0: Collect all directories (parent directories of files)
+    for source in &sources {
+        let mut current_path = source.path.parent();
+        while let Some(dir_path) = current_path {
+            all_dirs.insert(dir_path.to_path_buf());
+            current_path = dir_path.parent();
+        }
+    }
+
+    // Step 1: Create nodes for directories first (tree backbone)
+    for dir_path in &all_dirs {
+        let dir_label = dir_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_else(|| dir_path.to_str().unwrap_or("."))
+            .to_string();
+        let node_idx = graph.add_node(dir_label);
+        path_to_node.insert(dir_path.clone(), node_idx);
+    }
+
+    // Step 2: Create nodes for each source file with file names as labels
     for source in &sources {
         // Use filename only for cleaner display, fallback to full path
         let node_label = source
@@ -125,7 +146,38 @@ fn build_graph(sources: Vec<Source>) -> GraphResult {
         path_to_node.insert(source.path.clone(), node_idx);
     }
 
-    println!("  - Created {} nodes", graph.node_count());
+    println!("  - Created {} directory nodes", all_dirs.len());
+    println!("  - Created {} file nodes", sources.len());
+    println!("  - Total nodes: {}", graph.node_count());
+
+    // Step 3: Create filesystem hierarchy edges (directory -> file, directory -> subdirectory)
+    let mut hierarchy_edge_count = 0;
+    for source in &sources {
+        // Add edge from parent directory to file
+        if let Some(parent_dir) = source.path.parent()
+            && let (Some(&dir_node), Some(&file_node)) =
+                (path_to_node.get(parent_dir), path_to_node.get(&source.path))
+        {
+            graph.add_edge(dir_node, file_node, ());
+            hierarchy_edge_count += 1;
+        }
+    }
+
+    // Add edges from parent directories to child directories
+    for dir_path in &all_dirs {
+        if let Some(parent_dir) = dir_path.parent()
+            && let (Some(&parent_node), Some(&child_node)) =
+                (path_to_node.get(parent_dir), path_to_node.get(dir_path))
+        {
+            graph.add_edge(parent_node, child_node, ());
+            hierarchy_edge_count += 1;
+        }
+    }
+
+    println!(
+        "  - Created {} filesystem hierarchy edges",
+        hierarchy_edge_count
+    );
 
     // Debug: print first few file paths
     println!("  - Sample file paths:");
@@ -133,53 +185,14 @@ fn build_graph(sources: Vec<Source>) -> GraphResult {
         println!("      {}: {:?}", i, path);
     }
 
-    // Step 1.5: Add filesystem hierarchy edges (directory structure)
-    let mut fs_edge_count = 0;
-    let mut edges_added = std::collections::HashSet::new();
-    println!("  - Creating filesystem structure edges...");
-
-    let paths: Vec<&PathBuf> = path_to_node.keys().collect();
-    for (i, &path_a) in paths.iter().enumerate() {
-        for &path_b in paths.iter().skip(i + 1) {
-            if let (Some(&node_a), Some(&node_b)) =
-                (path_to_node.get(path_a), path_to_node.get(path_b))
-            {
-                // Skip self-loops
-                if node_a == node_b {
-                    continue;
-                }
-
-                // Create edge key to avoid duplicates
-                let edge_key = if node_a.index() < node_b.index() {
-                    (node_a.index(), node_b.index())
-                } else {
-                    (node_b.index(), node_a.index())
-                };
-
-                // Check if files are in the same directory (siblings)
-                let parent_a = path_a.parent();
-                let parent_b = path_b.parent();
-
-                // Connect files in the same directory
-                if parent_a == parent_b && parent_a.is_some() && !edges_added.contains(&edge_key) {
-                    graph.add_edge(node_a, node_b, ());
-                    edges_added.insert(edge_key);
-                    fs_edge_count += 1;
-                }
-            }
-        }
-    }
-
-    println!("  - Created {} filesystem structure edges", fs_edge_count);
-
-    // Step 2: Compute references for all sources
+    // Step 4: Compute references for all sources
     let start_ref = Instant::now();
     let all_references = compute_references(sources);
     let total_refs: usize = all_references.iter().map(|v| v.len()).sum();
     println!("  - Computed references in {:?}", start_ref.elapsed());
     println!("  - Total references found: {}", total_refs);
 
-    // Step 3: Add edges based on references
+    // Step 5: Add edges based on references
     let mut edge_count = 0;
     let mut reference_count = 0;
     let mut matched_count = 0;
@@ -266,9 +279,9 @@ fn build_graph(sources: Vec<Source>) -> GraphResult {
     println!("  - Matched {} references to files", matched_count);
     println!("  - Added {} reference edges", edge_count);
     println!(
-        "  - Total edges: {} ({} filesystem + {} reference)",
-        fs_edge_count + edge_count,
-        fs_edge_count,
+        "  - Total edges: {} ({} hierarchy + {} reference)",
+        hierarchy_edge_count + edge_count,
+        hierarchy_edge_count,
         edge_count
     );
 
