@@ -18,22 +18,52 @@ use source_processor::core::{
 };
 use std::error::Error;
 
-type FileGraph = StableDiGraph<(), ()>;
-type NodeLabels = HashMap<usize, String>;
-type GraphResult = Result<(FileGraph, NodeLabels), Box<dyn Error>>;
+type FileGraph = StableDiGraph<String, ()>;
+type GraphResult = Result<
+    (
+        FileGraph,
+        HashMap<petgraph::stable_graph::NodeIndex, String>,
+    ),
+    Box<dyn Error>,
+>;
 
 pub struct BasicApp {
-    g: Graph,
-    node_labels: HashMap<usize, String>,
+    g: Graph<(), ()>,
 }
 
 impl BasicApp {
     fn new(_: &CreationContext<'_>) -> Self {
-        let (g, labels) = generate_graph();
-        Self {
-            g: Graph::from(&g),
-            node_labels: labels,
+        let (g, label_map) = generate_graph();
+
+        // Create egui_graphs graph with empty node data
+        let mut petgraph_empty = StableDiGraph::<(), ()>::new();
+        let mut petgraph_to_egui = HashMap::new();
+
+        // Copy graph structure, mapping node indices
+        for node_idx in g.node_indices() {
+            let new_idx = petgraph_empty.add_node(());
+            petgraph_to_egui.insert(node_idx, new_idx);
         }
+
+        for edge in g.edge_indices() {
+            let (source, target) = g.edge_endpoints(edge).unwrap();
+            let egui_source = *petgraph_to_egui.get(&source).unwrap();
+            let egui_target = *petgraph_to_egui.get(&target).unwrap();
+            petgraph_empty.add_edge(egui_source, egui_target, ());
+        }
+
+        let mut egui_graph = Graph::from(&petgraph_empty);
+
+        // Set node labels using the mapping
+        for (petgraph_idx, label) in label_map {
+            if let Some(egui_idx) = petgraph_to_egui.get(&petgraph_idx)
+                && let Some(node) = egui_graph.node_mut(*egui_idx)
+            {
+                node.set_label(label);
+            }
+        }
+
+        Self { g: egui_graph }
     }
 }
 
@@ -44,12 +74,16 @@ impl App for BasicApp {
 
             // Display graph statistics
             ui.separator();
-            ui.label(format!("Nodes: {}", self.node_labels.len()));
+            ui.label(format!("Nodes: {}", self.g.node_count()));
+            ui.label(format!("Edges: {}", self.g.edge_count()));
         });
     }
 }
 
-fn generate_graph() -> (StableGraph<(), ()>, HashMap<usize, String>) {
+fn generate_graph() -> (
+    StableGraph<String, ()>,
+    HashMap<petgraph::stable_graph::NodeIndex, String>,
+) {
     let source = process_source(PathBuf::from("."));
 
     source.unwrap()
@@ -76,15 +110,19 @@ fn process_source(source: PathBuf) -> GraphResult {
 fn build_graph(sources: Vec<Source>) -> GraphResult {
     let mut graph = StableDiGraph::new();
     let mut path_to_node = HashMap::new();
-    let mut node_labels = HashMap::new();
 
-    // Step 1: Create nodes for each source file
+    // Step 1: Create nodes for each source file with file names as labels
     for source in &sources {
-        let node_idx = graph.add_node(());
-        let node_label = source.path.to_str().unwrap_or("unknown").to_string();
+        // Use filename only for cleaner display, fallback to full path
+        let node_label = source
+            .path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_else(|| source.path.to_str().unwrap_or("unknown"))
+            .to_string();
 
+        let node_idx = graph.add_node(node_label);
         path_to_node.insert(source.path.clone(), node_idx);
-        node_labels.insert(node_idx.index(), node_label);
     }
 
     println!("  - Created {} nodes", graph.node_count());
@@ -234,7 +272,14 @@ fn build_graph(sources: Vec<Source>) -> GraphResult {
         edge_count
     );
 
-    Ok((graph, node_labels))
+    // Extract labels from graph nodes into HashMap
+    let mut label_map = HashMap::new();
+    for node_idx in graph.node_indices() {
+        let label = graph[node_idx].clone();
+        label_map.insert(node_idx, label);
+    }
+
+    Ok((graph, label_map))
 }
 
 fn read_all_files_parallel(dir_path: &str) -> io::Result<Vec<Source>> {
