@@ -1,4 +1,3 @@
-
 # {{ project.github_organization }}
 
 {% for repo in project.repositories %}

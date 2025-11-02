@@ -1,7 +1,7 @@
 use askama::Template;
 use file_format::FileFormat;
 use git2::{Cred, RemoteCallbacks};
-use humansize::{format_size, DECIMAL};
+use humansize::{DECIMAL, format_size};
 use octocrab::Octocrab;
 use std::error::Error;
 use std::path::PathBuf;
