@@ -41,7 +41,7 @@ pub struct SourceCodeVisualizationApp {
 
 impl SourceCodeVisualizationApp {
     fn new(_cc: &CreationContext<'_>) -> Self {
-        let (g, label_map) = generate_graph();
+        let (g, label_map) = generate_graph(PathBuf::from("."));
 
         // Create egui_graphs graph with empty node data
         let mut petgraph_empty = StableDiGraph::<(), ()>::new();
@@ -100,11 +100,13 @@ impl App for SourceCodeVisualizationApp {
     }
 }
 
-fn generate_graph() -> (
+fn generate_graph(
+    source_path: PathBuf,
+) -> (
     StableGraph<String, ()>,
     HashMap<petgraph::stable_graph::NodeIndex, String>,
 ) {
-    let source = process_source(PathBuf::from("/Users/bregy/Documents/tilck"));
+    let source = process_source(source_path);
 
     source.unwrap()
 }
