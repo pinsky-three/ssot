@@ -8,10 +8,10 @@ use std::{
 use eframe::{App, CreationContext, NativeOptions, run_native};
 use egui::Context;
 use egui_graphs::{DefaultGraphView, Graph};
+use ignore::WalkBuilder;
 use petgraph::{prelude::StableDiGraph, stable_graph::StableGraph};
 use rayon::prelude::*;
 use std::error::Error;
-use walkdir::WalkDir;
 
 pub struct BasicApp {
     g: Graph,
@@ -51,10 +51,11 @@ fn process_source(source: PathBuf) -> Result<StableDiGraph<(), ()>, Box<dyn Erro
 }
 
 fn read_all_files_parallel(dir_path: &str) -> io::Result<Vec<String>> {
-    let paths: Vec<_> = WalkDir::new(dir_path)
-        .into_iter()
+    // WalkBuilder respects .gitignore files by default
+    let paths: Vec<_> = WalkBuilder::new(dir_path)
+        .build()
         .filter_map(|e| e.ok())
-        .filter(|entry| entry.path().is_file())
+        .filter(|entry| entry.file_type().is_some_and(|ft| ft.is_file()))
         .map(|entry| entry.path().to_owned())
         .collect();
 
