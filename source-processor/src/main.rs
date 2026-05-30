@@ -55,7 +55,10 @@ pub struct SourceCodeVisualizationApp {
 
 impl SourceCodeVisualizationApp {
     fn new(cc: &CreationContext<'_>) -> Self {
-        let (g, label_map) = generate_graph(PathBuf::from("."));
+        let root = std::env::var("SSOT_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let (g, label_map) = generate_graph(root);
 
         // Create egui_graphs graph with empty node data
         let mut petgraph_empty = StableDiGraph::<(), ()>::new();
